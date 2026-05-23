@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "RefDown",
+  "version": "0.1.0",
+  "description": "One-click citation generator for any web page, DOI, ISBN, PubMed ID, or arXiv ID. Local-first, all CSL styles, no login.",
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "RefDown — cite this page",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "contextMenus",
+    "clipboardWrite",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://api.crossref.org/*",
+    "https://openlibrary.org/*",
+    "https://eutils.ncbi.nlm.nih.gov/*",
+    "https://export.arxiv.org/*",
+    "https://raw.githubusercontent.com/citation-style-language/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/scraper.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["styles/*.csl", "locales/*.xml"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "commands": {
+    "cite-current-page": {
+      "suggested_key": { "default": "Ctrl+Shift+C", "mac": "Command+Shift+C" },
+      "description": "Cite current page"
+    }
+  }
+}

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RefDown</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>RefDown</h1>
+      <select id="style">
+        <option value="apa">APA 7</option>
+        <option value="modern-language-association">MLA 9</option>
+        <option value="chicago-author-date">Chicago (author-date)</option>
+        <option value="chicago-note-bibliography">Chicago (notes)</option>
+        <option value="harvard-cite-them-right">Harvard</option>
+        <option value="vancouver">Vancouver</option>
+        <option value="ieee">IEEE</option>
+        <option value="american-medical-association">AMA</option>
+      </select>
+    </header>
+
+    <div id="source-bar">
+      <label><input type="radio" name="src" value="auto" checked> Auto</label>
+      <label><input type="radio" name="src" value="webpage"> Web page</label>
+      <span id="detected" class="muted"></span>
+    </div>
+
+    <section id="meta" hidden>
+      <div class="row"><span class="k">Type</span><span id="m-type" class="v"></span></div>
+      <div class="row"><span class="k">Title</span><span id="m-title" class="v"></span></div>
+      <div class="row"><span class="k">Authors</span><span id="m-authors" class="v"></span></div>
+      <div class="row"><span class="k">Year</span><span id="m-year" class="v"></span></div>
+      <div class="row"><span class="k">Source</span><span id="m-source" class="v"></span></div>
+      <div class="row"><span class="k">DOI/URL</span><span id="m-id" class="v"></span></div>
+    </section>
+
+    <section id="output">
+      <textarea id="cite" readonly placeholder="Pick a style and click Cite this page…"></textarea>
+      <div class="btns">
+        <button id="cite-btn" class="primary">Cite this page</button>
+        <button id="copy-btn">Copy</button>
+        <button id="bib-btn">.bib</button>
+        <button id="ris-btn">.ris</button>
+      </div>
+    </section>
+
+    <footer>
+      <div class="links">
+        <a href="#" id="history-link">History</a>
+        <span class="sep">·</span>
+        <a href="#" id="options-link">Options</a>
+      </div>
+      <div class="credit">
+        Dr. Yusuf Hosoglu · <a href="https://drtr.uk" target="_blank" rel="noopener">drtr.uk</a>
+      </div>
+    </footer>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
