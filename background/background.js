@@ -23,7 +23,87 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     enrich(msg.meta).then(sendResponse).catch((e) => sendResponse({ ...msg.meta, error: e.message }));
     return true;
   }
+  if (msg.type === "find-ae-tab") {
+    findAETab().then(sendResponse);
+    return true;
+  }
+  if (msg.type === "list-ae-projects") {
+    listAEProjects().then(sendResponse);
+    return true;
+  }
+  if (msg.type === "add-ref-to-ae") {
+    addRefToAE(msg.projectId, msg.refData).then(sendResponse);
+    return true;
+  }
 });
+
+// --- ArticleEditor Integration ---
+
+const AE_URLS = [
+  "https://articleditor.drtr.uk",
+  "http://localhost:3000"
+];
+
+async function findAETab() {
+  for (const base of AE_URLS) {
+    const tabs = await chrome.tabs.query({ url: base + "/*" });
+    if (tabs.length > 0) return { tabId: tabs[0].id, url: tabs[0].url };
+  }
+  return null;
+}
+
+async function ensureAETab() {
+  const existing = await findAETab();
+  if (existing) return existing;
+  const tab = await chrome.tabs.create({ url: AE_URLS[0], active: false });
+  await new Promise(resolve => {
+    const listener = (tabId, info) => {
+      if (tabId === tab.id && info.status === "complete") {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+  await new Promise(r => setTimeout(r, 1500));
+  return { tabId: tab.id, url: tab.url };
+}
+
+async function listAEProjects() {
+  const tab = await findAETab();
+  if (!tab) return { projects: null, noTab: true };
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.tabId },
+      func: async () => {
+        if (!window.__aeReady) return null;
+        return await window.__aeListProjects();
+      },
+      world: "MAIN"
+    });
+    return { projects: result };
+  } catch (e) {
+    return { projects: null, error: e.message };
+  }
+}
+
+async function addRefToAE(projectId, refData) {
+  const tab = await ensureAETab();
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.tabId },
+      func: async (pid, data) => {
+        if (!window.__aeReady) return { success: false, error: "ArticleEditor not ready" };
+        return await window.__aeAddRefToProject(pid, data);
+      },
+      args: [projectId, refData],
+      world: "MAIN"
+    });
+    return result || { success: false, error: "No response" };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
 
 /**
  * Merge enrichment data, preferring fresh (API) truthy values over old (scraped) ones.

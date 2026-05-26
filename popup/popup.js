@@ -150,6 +150,126 @@ document.addEventListener("click", (e) => {
   if (a && a.getAttribute("href") === "#") e.preventDefault();
 });
 
+// --- ArticleEditor Integration ---
+
+function metaToAERef(m) {
+  return {
+    title: m.title || null,
+    authors: (m.authors || []).map(a => ({
+      family: a.family || null,
+      given: a.given || null,
+      literal: a.literal || null
+    })).filter(a => a.family || a.given || a.literal),
+    year: m.issued?.year || null,
+    doi: m.doi || null,
+    pmid: m.pmid || null,
+    url: m.pageUrl || m.url || null,
+    containerTitle: m.containerTitle || null,
+    volume: m.volume || null,
+    issue: m.issue || null,
+    pages: m.pageNumber || null,
+    abstract: m.abstract || null,
+    publisher: m.publisher || null,
+    type: m.type || "webpage",
+    source: "refdown-extension"
+  };
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s || "";
+  return d.innerHTML;
+}
+
+async function loadAEProjects() {
+  const section = $("ae-section");
+  const status = $("ae-status");
+  const list = $("ae-projects");
+
+  section.hidden = false;
+  status.textContent = "Connecting…";
+  list.innerHTML = "";
+
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "list-ae-projects" });
+    if (res.noTab) {
+      status.textContent = "Open ArticleEditor to add refs";
+      list.innerHTML = '<button class="ae-project" id="ae-open-btn">🌐 Open ArticleEditor</button>';
+      $("ae-open-btn").addEventListener("click", async () => {
+        await chrome.tabs.create({ url: "https://articleditor.drtr.uk/edit" });
+        setTimeout(loadAEProjects, 2000);
+      });
+      return;
+    }
+    if (!res.projects || res.error) {
+      status.textContent = res.error || "Could not connect";
+      return;
+    }
+    if (res.projects.length === 0) {
+      status.textContent = "No projects yet";
+      return;
+    }
+    status.textContent = `${res.projects.length} project${res.projects.length > 1 ? "s" : ""}`;
+    list.innerHTML = res.projects.map(p => `
+      <button class="ae-project" data-pid="${esc(p.id)}">
+        <span class="ae-p-title">${esc(p.title)}</span>
+        <span class="ae-p-count">${p.refCount} refs</span>
+      </button>
+    `).join("");
+
+    list.querySelectorAll(".ae-project").forEach(btn => {
+      btn.addEventListener("click", () => addToAEProject(btn));
+    });
+  } catch (e) {
+    status.textContent = "Extension error";
+    console.error("[refdown] AE error:", e);
+  }
+}
+
+async function addToAEProject(btn) {
+  if (!current) {
+    flash(btn, "Cite first!");
+    return;
+  }
+  const pid = btn.dataset.pid;
+  btn.classList.add("ae-adding");
+  btn.querySelector(".ae-p-count").textContent = "Adding…";
+
+  try {
+    const refData = metaToAERef(current);
+    const res = await chrome.runtime.sendMessage({
+      type: "add-ref-to-ae",
+      projectId: pid,
+      refData
+    });
+    btn.classList.remove("ae-adding");
+    if (res.success) {
+      btn.classList.add("ae-success");
+      btn.querySelector(".ae-p-count").textContent = "✓ Added";
+      setTimeout(() => {
+        btn.classList.remove("ae-success");
+        loadAEProjects();
+      }, 1500);
+    } else if (res.duplicate) {
+      btn.querySelector(".ae-p-count").textContent = "Already exists";
+      setTimeout(() => loadAEProjects(), 1500);
+    } else {
+      btn.classList.add("ae-error");
+      btn.querySelector(".ae-p-count").textContent = res.error || "Error";
+      setTimeout(() => {
+        btn.classList.remove("ae-error");
+        loadAEProjects();
+      }, 2000);
+    }
+  } catch (e) {
+    btn.classList.remove("ae-adding");
+    btn.querySelector(".ae-p-count").textContent = "Error";
+  }
+}
+
+$("ae-refresh").addEventListener("click", loadAEProjects);
+loadAEProjects();
+
 (async () => {
   const { lastStyle } = await chrome.storage.local.get("lastStyle");
   if (lastStyle) $("style").value = lastStyle;

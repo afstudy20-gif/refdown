@@ -29,14 +29,17 @@
     "storage",
     "contextMenus",
     "clipboardWrite",
-    "downloads"
+    "downloads",
+    "tabs"
   ],
   "host_permissions": [
     "https://api.crossref.org/*",
     "https://openlibrary.org/*",
     "https://eutils.ncbi.nlm.nih.gov/*",
     "https://export.arxiv.org/*",
-    "https://raw.githubusercontent.com/citation-style-language/*"
+    "https://raw.githubusercontent.com/citation-style-language/*",
+    "https://articleditor.drtr.uk/*",
+    "http://localhost:3000/*"
   ],
   "content_scripts": [
     {
