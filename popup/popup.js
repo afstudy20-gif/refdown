@@ -218,10 +218,12 @@ document.addEventListener("click", (e) => {
 
 function isPdfUrl(value) {
   try {
-    const url = new URL(value);
-    return /\.pdf(?:$|[?#])/i.test(url.href) ||
-      /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(url.href) ||
-      /arxiv\.org\/pdf\//i.test(url.href);
+    const href = new URL(value).href;
+    return (
+      /\.pdf(?:$|[?#])/i.test(href) ||
+      /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(href) ||
+      /arxiv\.org\/pdf\//i.test(href)
+    );
   } catch {
     return false;
   }
