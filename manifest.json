@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RefDown",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "One-click citation generator for any web page, DOI, ISBN, PubMed ID, or arXiv ID. Local-first, all CSL styles, no login.",
   "action": {
     "default_popup": "popup/popup.html",

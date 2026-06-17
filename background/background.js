@@ -1,5 +1,6 @@
 import { fetchCrossref, fetchOpenLibrary, fetchPubMed, fetchPmcIds, fetchArxiv } from "../lib/providers.js";
 import {
+  RESOLVE_API,
   readerUrlFor,
   shouldInterceptPdf,
 } from "../lib/pdf-intercept.js";
@@ -217,10 +218,27 @@ function isRedirectGuarded(tabId) {
   return until != null && until > Date.now();
 }
 
+async function resolvePdfUrl(pdfUrl) {
+  try {
+    const response = await fetch(RESOLVE_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: pdfUrl }),
+    });
+    if (!response.ok) return pdfUrl;
+    const data = await response.json();
+    return typeof data.pdfUrl === "string" && data.pdfUrl ? data.pdfUrl : pdfUrl;
+  } catch {
+    return pdfUrl;
+  }
+}
+
 function redirectTabToReader(tabId, pdfUrl) {
   if (!interceptEnabled || !shouldInterceptPdf(pdfUrl) || isRedirectGuarded(tabId)) return;
   redirectingTabs.set(tabId, Date.now() + REDIRECT_GUARD_MS);
-  chrome.tabs.update(tabId, { url: readerUrlFor(pdfUrl) });
+  resolvePdfUrl(pdfUrl).then((resolved) => {
+    chrome.tabs.update(tabId, { url: readerUrlFor(resolved) });
+  });
 }
 
 function maybeInterceptNavigation(details) {
