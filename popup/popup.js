@@ -239,7 +239,7 @@ function updatePdfButton(meta) {
 $("ae-open-pdf").addEventListener("click", async () => {
   const pdfUrl = $("ae-open-pdf").dataset.pdfUrl;
   if (!pdfUrl) return;
-  const readerUrl = `https://arted.drtr.uk/reader?url=${encodeURIComponent(pdfUrl)}`;
+  const readerUrl = `https://arted.drtr.uk/reader?url=${encodeURIComponent(pdfUrl)}&viewer=arted`;
   await chrome.tabs.create({ url: readerUrl });
 });
 
