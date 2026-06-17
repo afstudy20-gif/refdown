@@ -14,6 +14,7 @@
       doi: null,
       isbn: null,
       pmid: null,
+      pmcid: null,
       arxivId: null,
       url: location.href,
       accessed: { year: new Date().getFullYear(), month: new Date().getMonth() + 1, day: new Date().getDate() },
@@ -58,12 +59,13 @@
     meta.doi = extractDoi();
     meta.isbn = get('meta[name="citation_isbn"]') || extractIsbn();
     meta.pmid = get('meta[name="citation_pmid"]') || extractPmid();
+    meta.pmcid = extractPmcid();
     meta.arxivId = get('meta[name="citation_arxiv_id"]') || extractArxiv();
 
     const jsonLd = readJsonLd();
     if (jsonLd) mergeJsonLd(meta, jsonLd);
 
-    if (meta.doi || meta.containerTitle) meta.type = "article-journal";
+    if (meta.doi || meta.containerTitle || meta.pmcid) meta.type = "article-journal";
     else if (meta.isbn) meta.type = "book";
     else if (meta.arxivId) meta.type = "article";
 
@@ -127,6 +129,11 @@
     return u ? u[1] : null;
   }
 
+  function extractPmcid() {
+    const u = location.href.match(/(?:pmc\.ncbi\.nlm\.nih\.gov\/articles\/)?(PMC\d+)/i);
+    return u ? u[1].toUpperCase() : null;
+  }
+
   function extractArxiv() {
     const u = location.href.match(/arxiv\.org\/(?:abs|pdf)\/([^\s\/?#]+)/);
     return u ? u[1].replace(/\.pdf$/, "") : null;
@@ -156,5 +163,27 @@
     if (!meta.issued && (d.datePublished || d.dateCreated)) meta.issued = parseDate(d.datePublished || d.dateCreated);
     if (!meta.publisher && d.publisher) meta.publisher = typeof d.publisher === "string" ? d.publisher : d.publisher.name;
     if (!meta.containerTitle && d.isPartOf?.name) meta.containerTitle = d.isPartOf.name;
+  }
+
+  // Intercept PDF link clicks and redirect to ARTED Reader if enabled
+  if (!window.__refdownClickRegistered) {
+    window.__refdownClickRegistered = true;
+    window.addEventListener('click', (e) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      const link = e.target.closest('a');
+      if (!link) return;
+      const href = link.href;
+      if (!href) return;
+      const isPdf = /\.pdf(?:$|[?#])/i.test(href) || 
+                    /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(href);
+      if (!isPdf) return;
+      chrome.storage.local.get('interceptPdfs', (res) => {
+        if (res.interceptPdfs) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open('https://arted.drtr.uk/reader?url=' + encodeURIComponent(href), '_blank');
+        }
+      });
+    }, true);
   }
 })();

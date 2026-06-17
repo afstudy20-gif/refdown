@@ -7,11 +7,47 @@ let current = null;
 async function scrapeActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("No active tab");
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content/scraper.js"]
-  });
-  return { ...result, pageUrl: tab.url, pageTitle: tab.title };
+  const fallback = metadataFromUrl(tab.url, tab.title);
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content/scraper.js"]
+    });
+    return { ...fallback, ...(result || {}), pageUrl: tab.url, pageTitle: tab.title };
+  } catch (error) {
+    if (fallback.pmcid || isPdfUrl(tab.url)) return fallback;
+    throw error;
+  }
+}
+
+function metadataFromUrl(url, title) {
+  const pmcid = String(url || "").match(/(?:\/articles\/)?(PMC\d+)/i)?.[1]?.toUpperCase() || null;
+  return {
+    type: pmcid ? "article-journal" : "webpage",
+    title: null,
+    authors: [],
+    issued: null,
+    containerTitle: null,
+    publisher: null,
+    siteName: null,
+    doi: null,
+    isbn: null,
+    pmid: null,
+    pmcid,
+    arxivId: null,
+    url,
+    pageUrl: url,
+    pageTitle: title,
+    accessed: {
+      year: new Date().getFullYear(),
+      month: new Date().getMonth() + 1,
+      day: new Date().getDate()
+    },
+    pageNumber: null,
+    volume: null,
+    issue: null,
+    abstract: null
+  };
 }
 
 async function enrich(meta) {
@@ -31,6 +67,26 @@ function renderMeta(m) {
   $("m-year").textContent = m.issued?.year || "—";
   $("m-source").textContent = m.containerTitle || m.publisher || m.siteName || host || "—";
   $("m-id").textContent = m.doi ? `doi:${m.doi}` : m.pageUrl || "—";
+
+  const scihubVal = m.doi || m.pmid;
+  if (scihubVal) {
+    $("scihub-row").hidden = false;
+    const url = `https://sci-hub.st/${encodeURIComponent(scihubVal)}`;
+    $("m-scihub").innerHTML = `<a href="${url}" target="_blank" class="scihub-link">🔎 Sci-Hub'da Ara</a>`;
+  } else {
+    $("scihub-row").hidden = true;
+  }
+
+  const scholarVal = m.title;
+  if (scholarVal) {
+    $("scholar-row").hidden = false;
+    const url = `https://scholar.google.com/scholar?q=${encodeURIComponent(scholarVal)}`;
+    $("m-scholar").innerHTML = `<a href="${url}" target="_blank" class="scholar-link">🔎 Scholar'da Ara</a>`;
+  } else {
+    $("scholar-row").hidden = true;
+  }
+
+  updatePdfButton(m);
 }
 
 function authorLabel(a) {
@@ -45,6 +101,7 @@ function sourceMode() {
 function detectedKind(m) {
   if (m.doi) return "DOI / journal";
   if (m.pmid) return "PubMed";
+  if (m.pmcid) return "PubMed Central";
   if (m.arxivId) return "arXiv";
   if (m.isbn) return "Book (ISBN)";
   if (m.containerTitle) return "Journal";
@@ -147,10 +204,41 @@ function slug(m) {
 
 document.addEventListener("click", (e) => {
   const a = e.target.closest("a");
-  if (a && a.getAttribute("href") === "#") e.preventDefault();
+  if (!a) return;
+  const href = a.getAttribute("href");
+  if (href === "#") {
+    e.preventDefault();
+  } else if (href && href.startsWith("http")) {
+    e.preventDefault();
+    chrome.tabs.create({ url: href });
+  }
 });
 
 // --- ArticleEditor Integration ---
+
+function isPdfUrl(value) {
+  try {
+    const url = new URL(value);
+    return /\.pdf(?:$|[?#])/i.test(url.href) ||
+      /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(url.href);
+  } catch {
+    return false;
+  }
+}
+
+function updatePdfButton(meta) {
+  const button = $("ae-open-pdf");
+  const pdfUrl = meta?.pdfUrl || meta?.pageUrl || meta?.url;
+  button.hidden = !meta?.pdfUrl && !isPdfUrl(pdfUrl);
+  button.dataset.pdfUrl = button.hidden ? "" : pdfUrl;
+}
+
+$("ae-open-pdf").addEventListener("click", async () => {
+  const pdfUrl = $("ae-open-pdf").dataset.pdfUrl;
+  if (!pdfUrl) return;
+  const readerUrl = `https://arted.drtr.uk/reader?url=${encodeURIComponent(pdfUrl)}`;
+  await chrome.tabs.create({ url: readerUrl });
+});
 
 function metaToAERef(m) {
   return {
@@ -196,7 +284,7 @@ async function loadAEProjects() {
       status.textContent = "Open ArticleEditor to add refs";
       list.innerHTML = '<button class="ae-project" id="ae-open-btn">🌐 Open ArticleEditor</button>';
       $("ae-open-btn").addEventListener("click", async () => {
-        await chrome.tabs.create({ url: "https://articleditor.drtr.uk/edit" });
+        await chrome.tabs.create({ url: "https://arted.drtr.uk/edit" });
         setTimeout(loadAEProjects, 2000);
       });
       return;
@@ -269,6 +357,15 @@ async function addToAEProject(btn) {
 
 $("ae-refresh").addEventListener("click", loadAEProjects);
 loadAEProjects();
+
+// Intercept PDF toggle
+const pdfToggle = $("intercept-pdf-toggle");
+chrome.storage.local.get("interceptPdfs", (res) => {
+  pdfToggle.checked = !!res.interceptPdfs;
+});
+pdfToggle.addEventListener("change", () => {
+  chrome.storage.local.set({ interceptPdfs: pdfToggle.checked });
+});
 
 (async () => {
   const { lastStyle } = await chrome.storage.local.get("lastStyle");

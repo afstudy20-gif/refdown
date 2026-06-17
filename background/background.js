@@ -1,4 +1,4 @@
-import { fetchCrossref, fetchOpenLibrary, fetchPubMed, fetchArxiv } from "../lib/providers.js";
+import { fetchCrossref, fetchOpenLibrary, fetchPubMed, fetchPmcIds, fetchArxiv } from "../lib/providers.js";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -40,6 +40,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // --- ArticleEditor Integration ---
 
 const AE_URLS = [
+  "https://arted.drtr.uk",
   "https://articleditor.drtr.uk",
   "http://localhost:3000"
 ];
@@ -123,6 +124,16 @@ function mergePreferTruthy(base, fresh) {
 async function enrich(meta) {
   let out = { ...meta, _enrichLog: [] };
   try {
+    if (out.pmcid) {
+      out._enrichLog.push(`pmc:${out.pmcid}`);
+      const ids = await fetchPmcIds(out.pmcid);
+      if (ids) {
+        out._enrichLog.push("pmc:ok");
+        out = mergePreferTruthy(out, ids);
+      } else {
+        out._enrichLog.push("pmc:null");
+      }
+    }
     if (out.doi) {
       out._enrichLog.push(`crossref:${out.doi}`);
       const cr = await fetchCrossref(out.doi);
@@ -134,11 +145,12 @@ async function enrich(meta) {
       }
     }
     if (out.pmid) {
+      const hadDoiBeforePubMed = Boolean(out.doi);
       const pm = await fetchPubMed(out.pmid);
       if (pm) {
         out = mergePreferTruthy(out, { ...pm, pmid: out.pmid });
         // PubMed often exposes DOI we didn't have — do a second-pass Crossref fetch
-        if (pm.doi && !meta.doi) {
+        if (pm.doi && !hadDoiBeforePubMed) {
           const cr = await fetchCrossref(pm.doi);
           if (cr) out = mergePreferTruthy(out, { ...cr, doi: pm.doi });
         }

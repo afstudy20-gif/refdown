@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RefDown",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One-click citation generator for any web page, DOI, ISBN, PubMed ID, or arXiv ID. Local-first, all CSL styles, no login.",
   "action": {
     "default_popup": "popup/popup.html",
@@ -36,9 +36,11 @@
     "https://api.crossref.org/*",
     "https://openlibrary.org/*",
     "https://eutils.ncbi.nlm.nih.gov/*",
+    "https://pmc.ncbi.nlm.nih.gov/*",
     "https://export.arxiv.org/*",
     "https://raw.githubusercontent.com/citation-style-language/*",
     "https://articleditor.drtr.uk/*",
+    "https://arted.drtr.uk/*",
     "http://localhost:3000/*"
   ],
   "content_scripts": [

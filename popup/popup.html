@@ -20,6 +20,10 @@
       </select>
     </header>
 
+    <button id="ae-open-pdf" class="ae-open-pdf" hidden>
+      Open PDF in ARTED
+    </button>
+
     <div id="source-bar">
       <label><input type="radio" name="src" value="auto" checked> Auto</label>
       <label><input type="radio" name="src" value="webpage"> Web page</label>
@@ -47,13 +51,9 @@
       </div>
     </section>
 
-    <button id="ae-open-pdf" class="ae-open-pdf" hidden>
-      Open PDF in ArticleEditor
-    </button>
-
     <section id="ae-section" hidden>
       <div class="ae-header">
-        <span class="ae-badge">📚 Article Editor</span>
+        <span class="ae-badge">📚 ARTED</span>
         <button id="ae-refresh" class="ae-icon-btn" title="Refresh">↻</button>
       </div>
       <div id="ae-status"></div>
@@ -61,6 +61,11 @@
     </section>
 
     <footer>
+      <div class="settings-row">
+        <label>
+          <input type="checkbox" id="intercept-pdf-toggle"> Open PDF links in ARTED
+        </label>
+      </div>
       <div class="links">
         <a href="#" id="history-link">History</a>
         <span class="sep">·</span>

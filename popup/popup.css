@@ -88,6 +88,14 @@ header select {
   flex: 1;
   word-break: break-word;
 }
+.scihub-link, .scholar-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: bold;
+}
+.scihub-link:hover, .scholar-link:hover {
+  text-decoration: underline;
+}
 
 #output {
   padding: 10px 12px;
@@ -152,6 +160,25 @@ button.primary:hover { filter: brightness(1.05); }
   font-size: 13px;
 }
 .ae-icon-btn:hover { color: var(--fg); }
+.ae-open-pdf {
+  display: block;
+  width: fit-content;
+  margin: 8px 12px 4px 12px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.ae-open-pdf:hover {
+  background: var(--hover);
+}
+.ae-open-pdf[hidden] {
+  display: none !important;
+}
 #ae-status {
   font-size: 11px;
   color: var(--muted);
@@ -202,6 +229,25 @@ button.primary:hover { filter: brightness(1.05); }
 }
 .ae-project.ae-error {
   border-color: #ef4444;
+}
+
+.settings-row {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--muted);
+}
+.settings-row input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 footer {
