@@ -179,11 +179,10 @@
                     /arxiv\.org\/pdf\//i.test(href);
       if (!isPdf) return;
       chrome.storage.local.get('interceptPdfs', (res) => {
-        if (res.interceptPdfs) {
-          e.preventDefault();
-          e.stopPropagation();
-          window.open('https://arted.drtr.uk/reader?url=' + encodeURIComponent(href), '_blank');
-        }
+        if (res.interceptPdfs === false) return;
+        e.preventDefault();
+        e.stopPropagation();
+        chrome.runtime.sendMessage({ type: 'intercept-pdf', url: href });
       });
     }, true);
   }

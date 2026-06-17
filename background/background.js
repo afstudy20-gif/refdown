@@ -1,11 +1,26 @@
 import { fetchCrossref, fetchOpenLibrary, fetchPubMed, fetchPmcIds, fetchArxiv } from "../lib/providers.js";
+import {
+  readerUrlFor,
+  shouldInterceptPdf,
+} from "../lib/pdf-intercept.js";
 
-chrome.runtime.onInstalled.addListener(() => {
+const REDIRECT_GUARD_MS = 1500;
+const redirectingTabs = new Map();
+
+chrome.runtime.onInstalled.addListener(async (details) => {
   chrome.contextMenus.create({
     id: "cite-page",
     title: "Cite this page with RefDown",
-    contexts: ["page", "selection", "link"]
+    contexts: ["page", "selection", "link"],
   });
+
+  if (details.reason === "install") {
+    const { interceptPdfs } = await chrome.storage.local.get("interceptPdfs");
+    if (interceptPdfs === undefined) {
+      await chrome.storage.local.set({ interceptPdfs: true });
+      interceptEnabled = true;
+    }
+  }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -35,6 +50,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     addRefToAE(msg.projectId, msg.refData).then(sendResponse);
     return true;
   }
+  if (msg.type === "intercept-pdf") {
+    if (interceptEnabled && msg.url && shouldInterceptPdf(msg.url)) {
+      const tabId = sender.tab?.id;
+      if (tabId) redirectTabToReader(tabId, msg.url);
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
 });
 
 // --- ArticleEditor Integration ---
@@ -42,7 +65,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 const AE_URLS = [
   "https://arted.drtr.uk",
   "https://articleditor.drtr.uk",
-  "http://localhost:3000"
+  "http://localhost:3000",
 ];
 
 async function findAETab() {
@@ -57,7 +80,7 @@ async function ensureAETab() {
   const existing = await findAETab();
   if (existing) return existing;
   const tab = await chrome.tabs.create({ url: AE_URLS[0], active: false });
-  await new Promise(resolve => {
+  await new Promise((resolve) => {
     const listener = (tabId, info) => {
       if (tabId === tab.id && info.status === "complete") {
         chrome.tabs.onUpdated.removeListener(listener);
@@ -66,7 +89,7 @@ async function ensureAETab() {
     };
     chrome.tabs.onUpdated.addListener(listener);
   });
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 1500));
   return { tabId: tab.id, url: tab.url };
 }
 
@@ -80,7 +103,7 @@ async function listAEProjects() {
         if (!window.__aeReady) return null;
         return await window.__aeListProjects();
       },
-      world: "MAIN"
+      world: "MAIN",
     });
     return { projects: result };
   } catch (e) {
@@ -98,7 +121,7 @@ async function addRefToAE(projectId, refData) {
         return await window.__aeAddRefToProject(pid, data);
       },
       args: [projectId, refData],
-      world: "MAIN"
+      world: "MAIN",
     });
     return result || { success: false, error: "No response" };
   } catch (e) {
@@ -149,7 +172,6 @@ async function enrich(meta) {
       const pm = await fetchPubMed(out.pmid);
       if (pm) {
         out = mergePreferTruthy(out, { ...pm, pmid: out.pmid });
-        // PubMed often exposes DOI we didn't have — do a second-pass Crossref fetch
         if (pm.doi && !hadDoiBeforePubMed) {
           const cr = await fetchCrossref(pm.doi);
           if (cr) out = mergePreferTruthy(out, { ...cr, doi: pm.doi });
@@ -171,3 +193,50 @@ async function enrich(meta) {
   console.log("[refdown] enrich log:", out._enrichLog);
   return out;
 }
+
+// --- PDF interception (ARTED reader) ---
+
+let interceptEnabled = false;
+
+function readInterceptEnabled(value) {
+  return value !== false;
+}
+
+chrome.storage.local.get("interceptPdfs", (res) => {
+  interceptEnabled = readInterceptEnabled(res.interceptPdfs);
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === "local" && changes.interceptPdfs) {
+    interceptEnabled = readInterceptEnabled(changes.interceptPdfs.newValue);
+  }
+});
+
+function isRedirectGuarded(tabId) {
+  const until = redirectingTabs.get(tabId);
+  return until != null && until > Date.now();
+}
+
+function redirectTabToReader(tabId, pdfUrl) {
+  if (!interceptEnabled || !shouldInterceptPdf(pdfUrl) || isRedirectGuarded(tabId)) return;
+  redirectingTabs.set(tabId, Date.now() + REDIRECT_GUARD_MS);
+  chrome.tabs.update(tabId, { url: readerUrlFor(pdfUrl) });
+}
+
+function maybeInterceptNavigation(details) {
+  if (!interceptEnabled || details.frameId !== 0) return;
+  if (!shouldInterceptPdf(details.url)) return;
+  redirectTabToReader(details.tabId, details.url);
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(maybeInterceptNavigation);
+chrome.webNavigation.onCommitted.addListener(maybeInterceptNavigation);
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!interceptEnabled || !tab.url) return;
+  if (changeInfo.url || changeInfo.status === "loading") {
+    if (shouldInterceptPdf(tab.url)) {
+      redirectTabToReader(tabId, tab.url);
+    }
+  }
+});

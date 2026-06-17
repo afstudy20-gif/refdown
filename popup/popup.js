@@ -362,7 +362,7 @@ loadAEProjects();
 // Intercept PDF toggle
 const pdfToggle = $("intercept-pdf-toggle");
 chrome.storage.local.get("interceptPdfs", (res) => {
-  pdfToggle.checked = !!res.interceptPdfs;
+  pdfToggle.checked = res.interceptPdfs !== false;
 });
 pdfToggle.addEventListener("change", () => {
   chrome.storage.local.set({ interceptPdfs: pdfToggle.checked });

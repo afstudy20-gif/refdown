@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RefDown",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One-click citation generator for any web page, DOI, ISBN, PubMed ID, or arXiv ID. Local-first, all CSL styles, no login.",
   "action": {
     "default_popup": "popup/popup.html",
@@ -30,8 +30,20 @@
     "contextMenus",
     "clipboardWrite",
     "downloads",
-    "tabs"
+    "tabs",
+    "webNavigation",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
   ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "cors_rules",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
   "host_permissions": [
     "https://api.crossref.org/*",
     "https://openlibrary.org/*",
@@ -41,13 +53,14 @@
     "https://raw.githubusercontent.com/citation-style-language/*",
     "https://articleditor.drtr.uk/*",
     "https://arted.drtr.uk/*",
-    "http://localhost:3000/*"
+    "http://localhost:3000/*",
+    "<all_urls>"
   ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content/scraper.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [
