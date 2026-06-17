@@ -220,7 +220,8 @@ function isPdfUrl(value) {
   try {
     const url = new URL(value);
     return /\.pdf(?:$|[?#])/i.test(url.href) ||
-      /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(url.href);
+      /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(url.href) ||
+      /arxiv\.org\/pdf\//i.test(url.href);
   } catch {
     return false;
   }

@@ -175,7 +175,8 @@
       const href = link.href;
       if (!href) return;
       const isPdf = /\.pdf(?:$|[?#])/i.test(href) || 
-                    /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(href);
+                    /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(href) ||
+                    /arxiv\.org\/pdf\//i.test(href);
       if (!isPdf) return;
       chrome.storage.local.get('interceptPdfs', (res) => {
         if (res.interceptPdfs) {
