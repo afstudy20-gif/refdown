@@ -165,25 +165,4 @@
     if (!meta.containerTitle && d.isPartOf?.name) meta.containerTitle = d.isPartOf.name;
   }
 
-  // Intercept PDF link clicks and redirect to ARTED Reader if enabled
-  if (!window.__refdownClickRegistered) {
-    window.__refdownClickRegistered = true;
-    window.addEventListener('click', (e) => {
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      const link = e.target.closest('a');
-      if (!link) return;
-      const href = link.href;
-      if (!href) return;
-      const isPdf = /\.pdf(?:$|[?#])/i.test(href) || 
-                    /pmc\.ncbi\.nlm\.nih\.gov\/articles\/PMC\d+\/pdf\//i.test(href) ||
-                    /arxiv\.org\/pdf\//i.test(href);
-      if (!isPdf) return;
-      chrome.storage.local.get('interceptPdfs', (res) => {
-        if (res.interceptPdfs === false) return;
-        e.preventDefault();
-        e.stopPropagation();
-        chrome.runtime.sendMessage({ type: 'intercept-pdf', url: href });
-      });
-    }, true);
-  }
 })();

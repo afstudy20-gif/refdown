@@ -3,6 +3,7 @@ import { toBibTeX, toRIS } from "../lib/export.js";
 
 const $ = (id) => document.getElementById(id);
 let current = null;
+const PDF_DOWNLOAD_FOLDER = "RefDown PDFs";
 
 async function scrapeActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -172,6 +173,224 @@ function flash(btn, label) {
   setTimeout(() => (btn.textContent = orig), 1200);
 }
 
+function setPdfDownloadStatus(text) {
+  $("pdf-download-status").textContent = text;
+}
+
+function sanitizeFilename(name) {
+  const cleaned = String(name || "document.pdf")
+    .replace(/[<>:"\\|?*\x00-\x1f]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\.+/, "");
+  const base = cleaned || "document.pdf";
+  return /\.pdf$/i.test(base) ? base : `${base}.pdf`;
+}
+
+function filenameFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const id = u.searchParams.get("dosyaId") || u.searchParams.get("fileId") || u.searchParams.get("id");
+    const last = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "");
+    if (/fileDownload/i.test(last) && id) return sanitizeFilename(`document_${id}.pdf`);
+    return sanitizeFilename(last || (id ? `document_${id}.pdf` : "document.pdf"));
+  } catch {
+    return "document.pdf";
+  }
+}
+
+function downloadUrl(url, filename) {
+  return new Promise((resolve) => {
+    chrome.downloads.download(
+      {
+        url,
+        filename: `${PDF_DOWNLOAD_FOLDER}/${sanitizeFilename(filename)}`,
+        saveAs: false,
+        conflictAction: "uniquify"
+      },
+      () => {
+        const err = chrome.runtime.lastError;
+        resolve({ ok: !err, error: err?.message });
+      }
+    );
+  });
+}
+
+function needsPageClickDownload(url) {
+  try {
+    const parsed = new URL(url);
+    return /fileDownload\.htm$/i.test(parsed.pathname) || /ardeb-pbs\.tubitak\.gov\.tr$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function collectPagePdfs() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("No active tab");
+  const fallback = isPdfUrl(tab.url) ? [{ url: tab.url, filename: filenameFromUrl(tab.url) }] : [];
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const seen = new Set();
+        const pdfs = [];
+        const cleanName = (value) => {
+          const text = String(value || "")
+            .replace(/[<>:"\\|?*\x00-\x1f]/g, "_")
+            .replace(/\s+/g, " ")
+            .trim()
+            .replace(/^\.+/, "");
+          return /\.pdf$/i.test(text) ? text : `${text || "document"}.pdf`;
+        };
+        const nameFrom = (href, text) => {
+          const label = String(text || "").trim();
+          if (/\.pdf(?:$|[?#])/i.test(label)) return cleanName(label.replace(/[?#].*$/, ""));
+          try {
+            const url = new URL(href);
+            const id = url.searchParams.get("dosyaId") || url.searchParams.get("fileId") || url.searchParams.get("id");
+            const last = decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() || "");
+            if (/fileDownload/i.test(last) && id) return cleanName(label || `document_${id}.pdf`);
+            return cleanName(last || label || (id ? `document_${id}.pdf` : "document.pdf"));
+          } catch {
+            return cleanName(label || "document.pdf");
+          }
+        };
+        const looksDownloadUrl = (href) => {
+          try {
+            const url = new URL(href);
+            return (
+              /fileDownload/i.test(url.pathname) ||
+              /dosyaId=|fileId=|download/i.test(url.search) ||
+              /\/download(?:\/|$)/i.test(url.pathname)
+            );
+          } catch {
+            return false;
+          }
+        };
+        const surroundingText = (el) => {
+          const row = el.closest("tr, li, .row, [role='row']");
+          return `${el.textContent || ""} ${row?.textContent || ""}`;
+        };
+
+        for (const a of document.querySelectorAll("a[href]")) {
+          const href = a.href;
+          if (!href || seen.has(href)) continue;
+          const text = surroundingText(a);
+          const looksPdf =
+            /\.pdf(?:$|[?#])/i.test(href) ||
+            /\.pdf(?:\s|$)/i.test(text) ||
+            looksDownloadUrl(href);
+          if (!looksPdf) continue;
+          if (!/^https?:|^blob:/i.test(href)) continue;
+          seen.add(href);
+          pdfs.push({ url: href, filename: nameFrom(href, text) });
+        }
+        for (const el of document.querySelectorAll("[onclick]")) {
+          const raw = el.getAttribute("onclick") || "";
+          const match = raw.match(/https?:\/\/[^'")\s]+fileDownload\.htm\?[^'")\s]+|(?:\/[^'")\s]+)?fileDownload\.htm\?[^'")\s]+/i);
+          if (!match) continue;
+          const href = new URL(match[0].replace(/&amp;/g, "&"), location.href).href;
+          if (seen.has(href)) continue;
+          const text = surroundingText(el);
+          seen.add(href);
+          pdfs.push({ url: href, filename: nameFrom(href, text) });
+        }
+        return pdfs;
+      }
+    });
+    return result?.length ? result : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function clickPagePdfControls() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("No active tab");
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async () => {
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const isVisible = (el) => {
+          const style = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+        };
+        const hrefLooksDownload = (el) => {
+          const href = el.href || el.getAttribute("href") || el.getAttribute("onclick") || "";
+          return /fileDownload\.htm|dosyaId=|fileId=|\.pdf(?:$|[?#])/i.test(href);
+        };
+        const textLooksPdf = (el) => /\.pdf(?:\s|$)/i.test(el.textContent || "") || hrefLooksDownload(el);
+        const canClick = (el) => {
+          if (!isVisible(el) || !textLooksPdf(el)) return false;
+          const tag = el.tagName.toLowerCase();
+          return (
+            tag === "a" ||
+            tag === "button" ||
+            el.hasAttribute("onclick") ||
+            el.getAttribute("role") === "link" ||
+            el.tabIndex >= 0 ||
+            getComputedStyle(el).cursor === "pointer"
+          );
+        };
+        const candidates = [];
+        const seenText = new Set();
+        for (const el of document.querySelectorAll("a, button, [onclick], [role='link'], [tabindex]")) {
+          if (!canClick(el)) continue;
+          const key = (el.textContent || "").trim();
+          if (!key || seenText.has(key)) continue;
+          seenText.add(key);
+          candidates.push(el);
+        }
+        for (let i = 0; i < candidates.length; i += 1) {
+          candidates[i].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+          await sleep(350);
+        }
+        return candidates.length;
+      }
+    });
+    return Number(result || 0);
+  } catch {
+    return 0;
+  }
+}
+
+async function downloadPagePdfs() {
+  const btn = $("download-pdfs-btn");
+  btn.disabled = true;
+  setPdfDownloadStatus("Scanning...");
+  try {
+    const pdfs = await collectPagePdfs();
+    if (!pdfs.length) {
+      setPdfDownloadStatus("Trying clicks...");
+      const clicked = await clickPagePdfControls();
+      setPdfDownloadStatus(clicked ? `Clicked ${clicked}` : "No PDFs");
+      return;
+    }
+    if (pdfs.some((item) => needsPageClickDownload(item.url))) {
+      setPdfDownloadStatus("Clicking links...");
+      const clicked = await clickPagePdfControls();
+      setPdfDownloadStatus(clicked ? `Clicked ${clicked}` : "No PDFs");
+      return;
+    }
+    let ok = 0;
+    for (let i = 0; i < pdfs.length; i += 1) {
+      setPdfDownloadStatus(`${i + 1}/${pdfs.length}`);
+      const item = pdfs[i];
+      const res = await downloadUrl(item.url, item.filename || filenameFromUrl(item.url));
+      if (res.ok) ok += 1;
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    setPdfDownloadStatus(`Started ${ok}/${pdfs.length}`);
+  } catch (e) {
+    setPdfDownloadStatus(e.message || "Failed");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function saveHistory(meta, style, text) {
   const { history = [] } = await chrome.storage.local.get("history");
   history.unshift({ ts: Date.now(), style, text, meta });
@@ -180,6 +399,7 @@ async function saveHistory(meta, style, text) {
 
 $("cite-btn").addEventListener("click", cite);
 $("copy-btn").addEventListener("click", copy);
+$("download-pdfs-btn").addEventListener("click", downloadPagePdfs);
 $("bib-btn").addEventListener("click", () => {
   if (!current) return;
   download(`${slug(current)}.bib`, toBibTeX(current));
@@ -239,7 +459,7 @@ function updatePdfButton(meta) {
 $("ae-open-pdf").addEventListener("click", async () => {
   const pdfUrl = $("ae-open-pdf").dataset.pdfUrl;
   if (!pdfUrl) return;
-  const readerUrl = `https://arted.drtr.uk/reader?url=${encodeURIComponent(pdfUrl)}&viewer=arted`;
+  const readerUrl = `https://arted.drtr.uk/reader?url=${encodeURIComponent(pdfUrl)}`;
   await chrome.tabs.create({ url: readerUrl });
 });
 
@@ -360,15 +580,6 @@ async function addToAEProject(btn) {
 
 $("ae-refresh").addEventListener("click", loadAEProjects);
 loadAEProjects();
-
-// Intercept PDF toggle
-const pdfToggle = $("intercept-pdf-toggle");
-chrome.storage.local.get("interceptPdfs", (res) => {
-  pdfToggle.checked = res.interceptPdfs !== false;
-});
-pdfToggle.addEventListener("change", () => {
-  chrome.storage.local.set({ interceptPdfs: pdfToggle.checked });
-});
 
 (async () => {
   const { lastStyle } = await chrome.storage.local.get("lastStyle");

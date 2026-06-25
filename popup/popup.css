@@ -70,6 +70,30 @@ header select {
   font-size: 11px;
 }
 
+#pdf-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+#download-pdfs-btn {
+  flex: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+#download-pdfs-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+#pdf-download-status {
+  max-width: 150px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
 #meta {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
@@ -229,25 +253,6 @@ button.primary:hover { filter: brightness(1.05); }
 }
 .ae-project.ae-error {
   border-color: #ef4444;
-}
-
-.settings-row {
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.settings-row label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--muted);
-}
-.settings-row input[type="checkbox"] {
-  margin: 0;
-  cursor: pointer;
 }
 
 footer {

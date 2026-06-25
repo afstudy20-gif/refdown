@@ -1,12 +1,4 @@
 import { fetchCrossref, fetchOpenLibrary, fetchPubMed, fetchPmcIds, fetchArxiv } from "../lib/providers.js";
-import {
-  RESOLVE_API,
-  readerUrlFor,
-  shouldInterceptPdf,
-} from "../lib/pdf-intercept.js";
-
-const REDIRECT_GUARD_MS = 1500;
-const redirectingTabs = new Map();
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   chrome.contextMenus.create({
@@ -15,13 +7,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     contexts: ["page", "selection", "link"],
   });
 
-  if (details.reason === "install") {
-    const { interceptPdfs } = await chrome.storage.local.get("interceptPdfs");
-    if (interceptPdfs === undefined) {
-      await chrome.storage.local.set({ interceptPdfs: true });
-      interceptEnabled = true;
-    }
-  }
+  void details;
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -49,14 +35,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === "add-ref-to-ae") {
     addRefToAE(msg.projectId, msg.refData).then(sendResponse);
-    return true;
-  }
-  if (msg.type === "intercept-pdf") {
-    if (interceptEnabled && msg.url && shouldInterceptPdf(msg.url)) {
-      const tabId = sender.tab?.id;
-      if (tabId) redirectTabToReader(tabId, msg.url);
-    }
-    sendResponse({ ok: true });
     return true;
   }
 });
@@ -194,67 +172,3 @@ async function enrich(meta) {
   console.log("[refdown] enrich log:", out._enrichLog);
   return out;
 }
-
-// --- PDF interception (ARTED reader) ---
-
-let interceptEnabled = false;
-
-function readInterceptEnabled(value) {
-  return value !== false;
-}
-
-chrome.storage.local.get("interceptPdfs", (res) => {
-  interceptEnabled = readInterceptEnabled(res.interceptPdfs);
-});
-
-chrome.storage.onChanged.addListener((changes, namespace) => {
-  if (namespace === "local" && changes.interceptPdfs) {
-    interceptEnabled = readInterceptEnabled(changes.interceptPdfs.newValue);
-  }
-});
-
-function isRedirectGuarded(tabId) {
-  const until = redirectingTabs.get(tabId);
-  return until != null && until > Date.now();
-}
-
-async function resolvePdfUrl(pdfUrl) {
-  try {
-    const response = await fetch(RESOLVE_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: pdfUrl }),
-    });
-    if (!response.ok) return pdfUrl;
-    const data = await response.json();
-    return typeof data.pdfUrl === "string" && data.pdfUrl ? data.pdfUrl : pdfUrl;
-  } catch {
-    return pdfUrl;
-  }
-}
-
-function redirectTabToReader(tabId, pdfUrl) {
-  if (!interceptEnabled || !shouldInterceptPdf(pdfUrl) || isRedirectGuarded(tabId)) return;
-  redirectingTabs.set(tabId, Date.now() + REDIRECT_GUARD_MS);
-  resolvePdfUrl(pdfUrl).then((resolved) => {
-    chrome.tabs.update(tabId, { url: readerUrlFor(resolved) });
-  });
-}
-
-function maybeInterceptNavigation(details) {
-  if (!interceptEnabled || details.frameId !== 0) return;
-  if (!shouldInterceptPdf(details.url)) return;
-  redirectTabToReader(details.tabId, details.url);
-}
-
-chrome.webNavigation.onBeforeNavigate.addListener(maybeInterceptNavigation);
-chrome.webNavigation.onCommitted.addListener(maybeInterceptNavigation);
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!interceptEnabled || !tab.url) return;
-  if (changeInfo.url || changeInfo.status === "loading") {
-    if (shouldInterceptPdf(tab.url)) {
-      redirectTabToReader(tabId, tab.url);
-    }
-  }
-});
